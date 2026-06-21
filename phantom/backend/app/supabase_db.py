@@ -344,7 +344,7 @@ class SupabaseSession:
                 elif op == "in":
                     # PostgREST: or=(col.eq.v1,col.eq.v2)
                     or_parts = [f"{col}.eq.{v}" for v in val]
-                    params["or"] = ",".join(or_parts)
+                    params["or"] = "(" + ",".join(or_parts) + ")"
                 elif op == "is.null":
                     params[col] = "is.null"
                 elif op == "not.is.null":

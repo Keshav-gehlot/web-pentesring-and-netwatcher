@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { fetchAuth } from '../api';
+import { useScan } from '../ScanContext';
 
 const MODULES_LIST = [
   { id: "port_scanner",    name: "Port Scanner",           type: "Recon",   icon: "🔌", desc: "Nmap-powered open port discovery" },
@@ -48,100 +49,13 @@ const MODULE_ENDPOINT_MAP = {
 function Dashboard({ alerts, setAlerts, stats, loadStats }) {
   const [scanTarget, setScanTarget] = useState('');
   const [selectedModules, setSelectedModules] = useState(['port_scanner', 'sqli_tester', 'xss_detector']);
-  const [scanStatus, setScanStatus] = useState('idle'); // idle, running, completed, failed
-  const [scanResult, setScanResult] = useState(null);
-  const [scanDuration, setScanDuration] = useState(0);
+  const { scanStatus, scanResult, scanDuration, startScan } = useScan();
   const [expandedResult, setExpandedResult] = useState({});
   const [exportingPDF, setExportingPDF] = useState(false);
 
   const handleStartScan = async () => {
     if (!scanTarget.trim()) return;
-    setScanStatus('running');
-    setScanResult(null);
-    setScanDuration(0);
-    const start = performance.now();
-    
-    try {
-      const isFullScan = selectedModules.length >= 16;
-      
-      let resData;
-      if (isFullScan) {
-        resData = await fetchAuth('/api/full-scan', {
-          method: 'POST',
-          body: JSON.stringify({ target: scanTarget, options: {} })
-        });
-      } else if (selectedModules.length > 1) {
-        const moduleResults = await Promise.allSettled(
-          selectedModules.map(mod =>
-            fetchAuth(MODULE_ENDPOINT_MAP[mod] || `/api/${mod.replace(/_/g, '-')}`, {
-              method: 'POST',
-              body: JSON.stringify({ target: scanTarget, options: {} })
-            }).then(data => ({ mod, data }))
-          )
-        );
-        const combined = {};
-        moduleResults.forEach(r => {
-          if (r.status === 'fulfilled') {
-            combined[r.value.mod] = r.value.data;
-          } else {
-            combined[r.value?.mod || 'unknown'] = { risk: 'ERROR', error: r.reason?.message };
-          }
-        });
-        resData = { results: combined };
-      } else {
-        const mod = selectedModules[0];
-        const endpoint = MODULE_ENDPOINT_MAP[mod] || `/api/${mod.replace(/_/g, '-')}`;
-        const raw = await fetchAuth(endpoint, {
-          method: 'POST',
-          body: JSON.stringify({ target: scanTarget, options: {} })
-        });
-        resData = { results: { [mod]: raw } };
-      }
-
-      // If backend returned "running" (fire-and-forget), poll history for results
-      if (resData && resData.status === 'running') {
-        let attempts = 0;
-        const maxAttempts = 180;
-        while (attempts < maxAttempts) {
-          await new Promise(r => setTimeout(r, 2000));
-          attempts++;
-          try {
-            const history = await fetchAuth('/api/history?limit=1');
-            const latest = history.sessions?.[0];
-            if (latest && latest.target === scanTarget && latest.status === 'completed') {
-              const detail = await fetchAuth(`/api/history/${latest.id}`);
-              const combined = {};
-              (detail.results || []).forEach(r => {
-                combined[r.module_name] = r.result_data || { risk: r.risk_level, vulnerable: r.vulnerable };
-              });
-              resData = { session_id: latest.id, results: combined };
-              break;
-            }
-          } catch (e) { /* retry */ }
-        }
-      }
-      
-      setScanDuration(Math.round((performance.now() - start) / 1000));
-      setScanResult(resData);
-      setScanStatus('completed');
-      
-      const newAlerts = [];
-      Object.keys(resData.results || {}).forEach(m => {
-        const modRes = resData.results[m];
-        if (modRes && modRes.vulnerable) {
-          newAlerts.push({
-            module_name: m,
-            severity: modRes.risk || 'INFO',
-            description: `Vulnerability verified on target: ${scanTarget}`,
-            timestamp: new Date().toLocaleTimeString()
-          });
-        }
-      });
-      setAlerts(prev => [...newAlerts, ...prev]);
-      if(loadStats) loadStats();
-    } catch (e) {
-      setScanStatus('failed');
-    }
+    await startScan(scanTarget, selectedModules, loadStats, setAlerts);
   };
 
   const handleExportPDF = async () => {

@@ -24,6 +24,18 @@ try:
         worker_pool="solo",
         imports=("app.tasks.scanner_tasks",),
     )
-    CELERY_AVAILABLE = True
+
+    import socket
+    from urllib.parse import urlparse
+    parsed = urlparse(settings.redis_url)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(3)
+    try:
+        sock.connect((parsed.hostname or "localhost", parsed.port or 6379))
+        CELERY_AVAILABLE = True
+    except (socket.timeout, ConnectionRefusedError, OSError):
+        celery_app = None
+    finally:
+        sock.close()
 except Exception:
     celery_app = None

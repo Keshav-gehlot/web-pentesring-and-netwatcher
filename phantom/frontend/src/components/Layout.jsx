@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { clearAuthData } from '../api';
+import { useScan } from '../ScanContext';
 import AddUserModal from './AddUserModal';
 
 const NavIcon = ({ type, active }) => {
@@ -38,6 +39,7 @@ function Layout({ username, role, onLogout }) {
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
   const navigate = useNavigate();
+  const { scanStatus, scanTarget, scanModule } = useScan();
 
   const handleLogout = () => {
     clearAuthData();
@@ -167,6 +169,39 @@ function Layout({ username, role, onLogout }) {
         </aside>
 
         <main className="content-area">
+          {scanStatus === 'running' && (
+            <div style={{ padding: '10px 20px', background: 'rgba(157, 0, 255, 0.08)', borderBottom: '1px solid rgba(157, 0, 255, 0.25)', display: 'flex', alignItems: 'center', gap: '12px', animation: 'pulseGlow 2s infinite' }}>
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#a855f7', boxShadow: '0 0 8px #a855f7', animation: 'pulseDot 1s infinite' }}></span>
+              <span style={{ fontFamily: 'var(--font-nav)', fontSize: '11px', letterSpacing: '2px', color: 'var(--text-glow)' }}>
+                PHANTOM MODULES ENGAGED
+              </span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--neon-cyan)' }}>
+                {scanModule === 'full-scan' ? 'FULL AUDIT' : scanModule?.replace(/_/g, ' ').toUpperCase()} // {scanTarget}
+              </span>
+            </div>
+          )}
+          {scanStatus === 'completed' && (
+            <div style={{ padding: '10px 20px', background: 'rgba(46, 255, 156, 0.06)', borderBottom: '1px solid rgba(46, 255, 156, 0.2)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--neon-green)', boxShadow: '0 0 8px var(--neon-green)' }}></span>
+              <span style={{ fontFamily: 'var(--font-nav)', fontSize: '11px', letterSpacing: '2px', color: 'var(--neon-green)' }}>
+                AUDIT COMPLETE
+              </span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)' }}>
+                {scanModule === 'full-scan' ? 'FULL AUDIT' : scanModule?.replace(/_/g, ' ').toUpperCase()} // {scanTarget}
+              </span>
+            </div>
+          )}
+          {scanStatus === 'failed' && (
+            <div style={{ padding: '10px 20px', background: 'rgba(255, 46, 92, 0.06)', borderBottom: '1px solid rgba(255, 46, 92, 0.2)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--neon-red)', boxShadow: '0 0 8px var(--neon-red)' }}></span>
+              <span style={{ fontFamily: 'var(--font-nav)', fontSize: '11px', letterSpacing: '2px', color: 'var(--neon-red)' }}>
+                AUDIT FAILED
+              </span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)' }}>
+                {scanTarget}
+              </span>
+            </div>
+          )}
           <Outlet />
         </main>
       </div>

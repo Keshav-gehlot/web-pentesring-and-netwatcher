@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import './index.css';
 
 import { getToken, setAuthData, fetchAuth } from './api';
+import { ScanProvider } from './ScanContext';
 
 // Components & Pages
 import Layout from './components/Layout';
@@ -77,17 +78,19 @@ function App() {
   }
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Layout username={username} role={role} onLogout={handleLogout} />}>
-          <Route index element={<Dashboard alerts={alerts} setAlerts={setAlerts} stats={stats} loadStats={loadStats} />} />
-          <Route path="netwatch" element={<NetWatchPanel />} />
-          <Route path="history" element={<History loadStats={loadStats} />} />
-          <Route path="schedule" element={<Schedule />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <ScanProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Layout username={username} role={role} onLogout={handleLogout} />}>
+            <Route index element={<Dashboard alerts={alerts} setAlerts={setAlerts} stats={stats} loadStats={loadStats} />} />
+            <Route path="netwatch" element={<NetWatchPanel />} />
+            <Route path="history" element={<History loadStats={loadStats} />} />
+            <Route path="schedule" element={<Schedule />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </ScanProvider>
   );
 }
 

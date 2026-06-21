@@ -230,7 +230,12 @@ async def _run_scan_background(
         session_id = session_rec.id
 
         start_time = time.monotonic()
-        task = celery_task_func.delay(target, options)
+        try:
+            task = celery_task_func.delay(target, options)
+        except Exception as celery_err:
+            print(f"[WARN] Celery unavailable ({celery_err}), falling back to direct execution")
+            from app.tasks.scanner_tasks import run_task_direct
+            task = run_task_direct(module_name, target, options)
 
         max_wait = 900
         elapsed = 0.0
@@ -585,7 +590,7 @@ async def list_reports(
             "target": r.target,
             "overall_risk": r.overall_risk,
             "session_id": r.session_id,
-            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "created_at": (r.created_at.isoformat() if hasattr(r.created_at, 'isoformat') else str(r.created_at)) if r.created_at else None,
             "download_url": signed_url,
         })
 
@@ -701,24 +706,32 @@ async def _run_full_scan_background(user_id: int, username: str, target: str, op
         session_id = session_rec.id
 
         from app.tasks import scanner_tasks
-        tasks = [
-            scanner_tasks.port_scan_task.delay(target, options),
-            scanner_tasks.sqli_test_task.delay(target, options),
-            scanner_tasks.xss_detect_task.delay(target, options),
-            scanner_tasks.subdomain_enum_task.delay(target, options),
-            scanner_tasks.header_analyzer_task.delay(target, options),
-            scanner_tasks.ssl_analyzer_task.delay(target, options),
-            scanner_tasks.dir_enum_task.delay(target, options),
-            scanner_tasks.waf_detect_task.delay(target, options),
-            scanner_tasks.whois_lookup_task.delay(target, options),
-            scanner_tasks.dns_recon_task.delay(target, options),
-            scanner_tasks.cve_lookup_task.delay(target, options),
-            scanner_tasks.csrf_detector_task.delay(target, options),
-            scanner_tasks.ssrf_detector_task.delay(target, options),
-            scanner_tasks.xxe_detector_task.delay(target, options),
-            scanner_tasks.auth_tester_task.delay(target, options),
-            scanner_tasks.open_redirect_task.delay(target, options),
+        task_module_pairs = [
+            ("port_scanner", scanner_tasks.port_scan_task),
+            ("sqli_tester", scanner_tasks.sqli_test_task),
+            ("xss_detector", scanner_tasks.xss_detect_task),
+            ("subdomain_enum", scanner_tasks.subdomain_enum_task),
+            ("header_analyzer", scanner_tasks.header_analyzer_task),
+            ("ssl_analyzer", scanner_tasks.ssl_analyzer_task),
+            ("dir_enum", scanner_tasks.dir_enum_task),
+            ("waf_detect", scanner_tasks.waf_detect_task),
+            ("whois_lookup", scanner_tasks.whois_lookup_task),
+            ("dns_recon", scanner_tasks.dns_recon_task),
+            ("cve_lookup", scanner_tasks.cve_lookup_task),
+            ("csrf_detector", scanner_tasks.csrf_detector_task),
+            ("ssrf_detector", scanner_tasks.ssrf_detector_task),
+            ("xxe_detector", scanner_tasks.xxe_detector_task),
+            ("auth_tester", scanner_tasks.auth_tester_task),
+            ("open_redirect", scanner_tasks.open_redirect_task),
         ]
+        tasks = []
+        for mod_name, task_func in task_module_pairs:
+            try:
+                tasks.append(task_func.delay(target, options))
+            except Exception as celery_err:
+                print(f"[WARN] Celery unavailable for {mod_name} ({celery_err}), falling back to direct execution")
+                from app.tasks.scanner_tasks import run_task_direct
+                tasks.append(run_task_direct(mod_name, target, options))
 
         start_time = time.monotonic()
         while True:
@@ -800,8 +813,8 @@ async def get_history(limit: int = 10, offset: int = 0, db: AsyncSession = Depen
                 "target": s.target,
                 "status": s.status,
                 "overall_risk": s.overall_risk,
-                "created_at": s.created_at.isoformat() if s.created_at else None,
-                "completed_at": s.completed_at.isoformat() if s.completed_at else None,
+                "created_at": (s.created_at.isoformat() if hasattr(s.created_at, 'isoformat') else str(s.created_at)) if s.created_at else None,
+                "completed_at": (s.completed_at.isoformat() if hasattr(s.completed_at, 'isoformat') else str(s.completed_at)) if s.completed_at else None,
                 "modules_run": s.modules_run
             }
             for s in sessions
@@ -825,8 +838,8 @@ async def get_history_detail(session_id: int, db: AsyncSession = Depends(get_db)
         "target": session.target,
         "status": session.status,
         "overall_risk": session.overall_risk,
-        "created_at": session.created_at.isoformat() if session.created_at else None,
-        "completed_at": session.completed_at.isoformat() if session.completed_at else None,
+        "created_at": (session.created_at.isoformat() if hasattr(session.created_at, 'isoformat') else str(session.created_at)) if session.created_at else None,
+        "completed_at": (session.completed_at.isoformat() if hasattr(session.completed_at, 'isoformat') else str(session.completed_at)) if session.completed_at else None,
         "modules_run": session.modules_run,
         "results": [
             {
@@ -844,7 +857,7 @@ async def get_history_detail(session_id: int, db: AsyncSession = Depends(get_db)
                 "module_name": a.module_name,
                 "severity": a.severity,
                 "description": a.description,
-                "timestamp": a.timestamp.isoformat() if a.timestamp else None,
+                "timestamp": (a.timestamp.isoformat() if hasattr(a.timestamp, 'isoformat') else str(a.timestamp)) if a.timestamp else None,
                 "acknowledged": a.acknowledged
             }
             for a in session.alerts
