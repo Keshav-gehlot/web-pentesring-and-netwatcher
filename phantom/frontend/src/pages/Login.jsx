@@ -27,11 +27,29 @@ function Login({ onLoginSuccess }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
       });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || 'Failed to authenticate');
+      const contentType = res.headers.get('content-type') || '';
+      const raw = await res.text();
+
+      let data = null;
+      if (raw) {
+        try {
+          data = contentType.includes('application/json') ? JSON.parse(raw) : JSON.parse(raw);
+        } catch {
+          const backendMessage = raw.replace(/<[^>]*>/g, ' ').replace(/\\s+/g, ' ').trim();
+          if (/your space|sleeping|building|application error|not found/i.test(backendMessage)) {
+            throw new Error('PHANTOM backend is unavailable or still starting. Please restart/wake the backend and try again.');
+          }
+          throw new Error(backendMessage || 'Backend returned an invalid response.');
+        }
       }
-      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.detail || data?.message || `Authentication failed (HTTP ${res.status})`);
+      }
+
+      if (!data?.access_token) {
+        throw new Error('Backend did not return an access token.');
+      }
       setAuthData(data.access_token, data.username, data.role);
       onLoginSuccess(data.access_token, data.username, data.role);
       navigate('/');
