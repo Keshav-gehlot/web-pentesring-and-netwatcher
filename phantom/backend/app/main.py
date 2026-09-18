@@ -370,9 +370,18 @@ class LoginPayload(BaseModel):
 
 @app.post("/auth/login")
 async def login(payload: LoginPayload, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(models.User).where(models.User.username == payload.username))
+    result = await db.execute(select(models.User).where(models.User.username == payload.username.strip()))
     user = result.scalars().first()
-    if not user or not verify_password(payload.password, user.hashed_password):
+    if not user or not user.hashed_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Incorrect username or password"
+        )
+    try:
+        valid_password = verify_password(payload.password, user.hashed_password)
+    except Exception:
+        valid_password = False
+    if not valid_password:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Incorrect username or password"
