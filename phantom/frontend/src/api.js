@@ -35,5 +35,23 @@ export const fetchAuth = async (url, options = {}) => {
     throw new Error('Session expired. Please log in again.');
   }
   
-  return response.json();
+  const contentType = response.headers.get('content-type') || '';
+  const raw = await response.text();
+
+  if (!raw) {
+    if (!response.ok) {
+      throw new Error(`API request failed (HTTP ${response.status})`);
+    }
+    return null;
+  }
+
+  try {
+    return contentType.includes('application/json') ? JSON.parse(raw) : JSON.parse(raw);
+  } catch {
+    const message = raw.replace(/<[^>]*>/g, ' ').replace(/\\s+/g, ' ').trim();
+    if (/your space|sleeping|building|application error|not found/i.test(message)) {
+      throw new Error('PHANTOM backend is unavailable or still starting.');
+    }
+    throw new Error(message || 'API returned an invalid response.');
+  }
 };
