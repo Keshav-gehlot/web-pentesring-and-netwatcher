@@ -400,12 +400,20 @@ class SupabaseSession:
                 total = len(data)
             return _Result([{"count": total}])
 
-        # Wrap in ModelProxy
+        # Wrap rows with the actual SQLAlchemy model class.
+        # _TABLE_MAP is table-name based, so looking up models.users
+        # would return None for the User model and break dirty-field updates.
+        from app import models
         model_class = None
-        for name, tbl in _TABLE_MAP.items():
-            if tbl == table:
-                from app import models
-                model_class = getattr(models, name, None)
+        for candidate in (
+            models.User,
+            models.ScanSession,
+            models.ScanResult,
+            models.Alert,
+            models.ScanReport,
+        ):
+            if getattr(candidate, "__tablename__", None) == table:
+                model_class = candidate
                 break
 
         wrapped = [ModelProxy(row, model_class) for row in data]
