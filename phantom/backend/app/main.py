@@ -170,7 +170,12 @@ async def on_startup():
         db = await db_cm.__aenter__()
     try:
         result = await db.execute(select(models.User).where(models.User.username == "admin"))
-        if not result.scalars().first():
+        admin_user = result.scalars().first()
+
+        # Ensure the built-in development admin credentials are available.
+        # If an admin already exists, synchronize its password/role so
+        # admin / admin123 always works for this project.
+        if not admin_user:
             admin_user = models.User(
                 username="admin",
                 hashed_password=get_password_hash("admin123"),
@@ -179,6 +184,11 @@ async def on_startup():
             db.add(admin_user)
             await db.commit()
             print("Default admin user created successfully: admin / admin123")
+        else:
+            admin_user.hashed_password = get_password_hash("admin123")
+            admin_user.role = "admin"
+            await db.commit()
+            print("Default admin credentials synchronized: admin / admin123")
     finally:
         if not _using_supabase_rest:
             await db_cm.__aexit__(None, None, None)
